@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { DocumentExtractor } from '../services/documentExtractor';
+import { OpenAIAnalyzer } from '../services/openaiAnalyzer';
 import { Upload, FileCheck, AlertCircle, CheckCircle, XCircle, FileText, Loader2, Trash2 } from 'lucide-react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -113,149 +115,102 @@ export function DocumentCheckView() {
     setCheckResult(null);
   };
 
-  const simulateAnalysis = () => {
-    if (!piDocument) return;
+  const performRealAnalysis = async () => {
+    if (!piDocument?.file) {
+      alert('Por favor, faça upload do documento PI primeiro.');
+      return;
+    }
 
-    // Inicia análise
-    setCheckResult({
-      status: 'analyzing',
-      progress: 0,
-      results: [],
-      overallStatus: null,
-    });
+    try {
+      setCheckResult({
+        status: 'analyzing',
+        progress: 0,
+        results: [],
+        overallStatus: null,
+      });
 
-    // Simula progresso
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 10;
-      setCheckResult(prev => prev ? { ...prev, progress } : null);
+      const documentExtractor = new DocumentExtractor();
+      const openaiAnalyzer = new OpenAIAnalyzer();
 
-      if (progress >= 100) {
-        clearInterval(interval);
-        // Simula resultados da análise
-        generateMockResults();
+      // Extrai texto do PI
+      setCheckResult(prev => prev ? { ...prev, progress: 10 } : null);
+      const piText = await documentExtractor.extractText(piDocument.file);
+
+      const results: AnalysisResult[] = [];
+      let currentProgress = 20;
+      
+      // Conta documentos para análise
+      const docsToAnalyze: Array<{ key: string; doc: UploadedDocument }> = [];
+      
+      if (documents.notaFiscal) docsToAnalyze.push({ key: 'notaFiscal', doc: documents.notaFiscal });
+      if (documents.artigo299) docsToAnalyze.push({ key: 'artigo299', doc: documents.artigo299 });
+      if (documents.relatorios) docsToAnalyze.push({ key: 'relatorios', doc: documents.relatorios });
+      if (documents.simplesNacional) docsToAnalyze.push({ key: 'simplesNacional', doc: documents.simplesNacional });
+      documents.outros.forEach(doc => docsToAnalyze.push({ key: 'outros', doc }));
+
+      if (docsToAnalyze.length === 0) {
+        alert('Por favor, adicione pelo menos um documento para validação.');
+        setCheckResult(null);
+        return;
       }
-    }, 300);
+
+      const progressIncrement = 70 / docsToAnalyze.length;
+
+      // Analisa cada documento
+      for (const { key, doc } of docsToAnalyze) {
+        if (!doc.file) continue;
+
+        // Extrai texto do documento
+        const docText = await documentExtractor.extractText(doc.file);
+
+        // Analisa com OpenAI
+        const analysisResult = await openaiAnalyzer.compareDocuments(
+          piText,
+          docText,
+          key
+        );
+
+        // Converte para formato de resultado
+        const issues = analysisResult.comparisons
+          .filter(comp => !comp.match)
+          .map(comp => ({
+            field: comp.field,
+            piValue: comp.piValue,
+            documentValue: comp.documentValue,
+            severity: comp.severity
+          }));
+
+        results.push({
+          documentType: doc.name,
+          status: analysisResult.overallStatus,
+          issues,
+          summary: analysisResult.summary
+        });
+
+        currentProgress += progressIncrement;
+        setCheckResult(prev => prev ? { ...prev, progress: Math.min(Math.round(currentProgress), 90) } : null);
+      }
+
+      // Determina status geral
+      const hasRejection = results.some(r => r.status === 'rejected');
+      const hasWarning = results.some(r => r.status === 'warning');
+      const overallStatus = hasRejection ? 'rejected' : (hasWarning ? 'warning' : 'approved');
+
+      setCheckResult({
+        status: 'completed',
+        progress: 100,
+        results,
+        overallStatus
+      });
+
+    } catch (error) {
+      console.error('Erro na análise:', error);
+      alert(`Erro ao analisar documentos: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+      setCheckResult(null);
+    }
   };
 
-  const generateMockResults = () => {
-    const results: AnalysisResult[] = [];
-    let hasRejection = false;
-    let hasWarning = false;
 
-    // Analisa Nota Fiscal
-    if (documents.notaFiscal) {
-      const issues: AnalysisResult['issues'] = [];
-      
-      // Simula checagem de valores
-      if (Math.random() > 0.7) {
-        issues.push({
-          field: 'Valor Total',
-          piValue: 'R$ 150.000,00',
-          documentValue: 'R$ 148.500,00',
-          severity: 'warning',
-        });
-        hasWarning = true;
-      }
-
-      if (Math.random() > 0.8) {
-        issues.push({
-          field: 'CNPJ Fornecedor',
-          piValue: '12.345.678/0001-90',
-          documentValue: '12.345.678/0001-91',
-          severity: 'critical',
-        });
-        hasRejection = true;
-      }
-
-      results.push({
-        documentType: 'Nota Fiscal',
-        status: hasRejection ? 'rejected' : (issues.length > 0 ? 'warning' : 'approved'),
-        issues,
-        summary: issues.length === 0 
-          ? 'Documento em conformidade com o PI.' 
-          : `${issues.length} divergência(s) identificada(s).`,
-      });
-    }
-
-    // Analisa Artigo 299
-    if (documents.artigo299) {
-      const issues: AnalysisResult['issues'] = [];
-      
-      if (Math.random() > 0.9) {
-        issues.push({
-          field: 'Data de Vigência',
-          piValue: '01/11/2025 a 31/12/2025',
-          documentValue: '01/11/2025 a 30/11/2025',
-          severity: 'critical',
-        });
-        hasRejection = true;
-      }
-
-      results.push({
-        documentType: 'Artigo 299',
-        status: issues.length > 0 ? 'rejected' : 'approved',
-        issues,
-        summary: issues.length === 0 
-          ? 'Documento aprovado e em conformidade.' 
-          : `Documento rejeitado: ${issues.length} erro(s) crítico(s).`,
-      });
-    }
-
-    // Analisa Relatórios
-    if (documents.relatorios) {
-      const issues: AnalysisResult['issues'] = [];
-      
-      if (Math.random() > 0.6) {
-        issues.push({
-          field: 'Período de Veiculação',
-          piValue: 'Novembro/2025',
-          documentValue: 'Outubro/2025',
-          severity: 'warning',
-        });
-        hasWarning = true;
-      }
-
-      results.push({
-        documentType: 'Relatórios',
-        status: issues.length > 0 ? 'warning' : 'approved',
-        issues,
-        summary: issues.length === 0 
-          ? 'Relatórios consistentes com o PI.' 
-          : `Atenção: ${issues.length} divergência(s) encontrada(s).`,
-      });
-    }
-
-    // Analisa Simples Nacional
-    if (documents.simplesNacional) {
-      results.push({
-        documentType: 'Simples Nacional',
-        status: 'approved',
-        issues: [],
-        summary: 'Documento válido e dentro do prazo de validade.',
-      });
-    }
-
-    // Analisa Outros Documentos
-    documents.outros.forEach((doc, index) => {
-      results.push({
-        documentType: doc.name,
-        status: 'approved',
-        issues: [],
-        summary: 'Documento verificado e aprovado.',
-      });
-    });
-
-    // Define status geral
-    const overallStatus = hasRejection ? 'rejected' : (hasWarning ? 'warning' : 'approved');
-
-    setCheckResult({
-      status: 'completed',
-      progress: 100,
-      results,
-      overallStatus,
-    });
-  };
 
   const hasDocumentsToCheck = piDocument && (
     documents.notaFiscal ||
@@ -283,7 +238,7 @@ export function DocumentCheckView() {
           {/* Botão Checagem no Header */}
           {hasDocumentsToCheck && !checkResult && (
             <Button
-              onClick={simulateAnalysis}
+              onClick={performRealAnalysis}
               size="lg"
               className="bg-purple-600 hover:bg-purple-700 text-white px-8"
             >
