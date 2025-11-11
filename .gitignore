@@ -1,0 +1,67 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+
+# Production
+build/
+dist/
+
+# Misc
+.DS_Store
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Editor directories and files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Cache
+.cache/
+*.cache
+
+# System files
+.browser_data_dir/
+.secrets/
+.logs/
+.npm/
+.nvm/
+.pki/
+.local/
+.config/
+sandbox.txt
+.user_env
+.zshrc
+.bashrc
+.bash_logout
+.profile
+.gitconfig
+
+# Test files
+test-docs/
+
+# Uploads
+upload/
+Downloads/
+
+# Screenshots and page texts
+screenshots/
+page_texts/
