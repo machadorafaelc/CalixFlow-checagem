@@ -8,10 +8,10 @@ Sistema de validação automatizada de documentos contra o PI (Pedido de Inserç
 
 O CalixFlow é uma plataforma de gestão de agências que inclui um módulo especializado em checagem de documentos. Este sistema permite validar automaticamente documentos como Notas Fiscais, Artigo 299, Relatórios e Simples Nacional contra um documento base (PI), identificando divergências e garantindo conformidade.
 
-## ✨ Funcionalidades Atuais
+## ✨ Funcionalidades
 
 ### Interface de Upload
-- ✅ Upload de documento base (PI) em PDF, DOC ou DOCX
+- ✅ Upload de documento base (PI) em PDF, DOC, DOCX ou TXT
 - ✅ Upload de múltiplos documentos para validação:
   - Nota Fiscal
   - Artigo 299
@@ -21,13 +21,16 @@ O CalixFlow é uma plataforma de gestão de agências que inclui um módulo espe
 - ✅ Visualização de arquivos enviados com detalhes (nome, tamanho, data)
 - ✅ Remoção individual de documentos
 
-### Análise de Documentos
-- ✅ Barra de progresso visual durante análise
-- ✅ Comparação campo a campo entre PI e documentos
+### Análise Inteligente com IA ✨ NOVO!
+- ✅ **Integração real com GPT-3.5-turbo da OpenAI**
+- ✅ Extração automática de campos importantes
+- ✅ Comparação inteligente entre PI e documentos
 - ✅ Identificação de divergências com três níveis de severidade:
-  - 🔴 **Crítico**: Erros que impedem aprovação
-  - 🟡 **Atenção**: Divergências que precisam revisão
+  - 🔴 **Crítico**: Erros que impedem aprovação (ex: CNPJ diferente)
+  - 🟡 **Atenção**: Divergências que precisam revisão (ex: valor discrepante)
   - 🔵 **Info**: Informações complementares
+- ✅ Nível de confiança para cada comparação
+- ✅ Explicações detalhadas das divergências
 
 ### Resultados
 - ✅ Status geral (Aprovado/Rejeitado/Com Ressalvas)
@@ -35,11 +38,22 @@ O CalixFlow é uma plataforma de gestão de agências que inclui um módulo espe
 - ✅ Comparação lado a lado de valores divergentes
 - ✅ Interface visual clara com cores e ícones
 
-## 🚧 Status Atual
+## 🚀 Status Atual
 
-**Versão**: 0.1.0 (Protótipo com dados simulados)
+**Versão**: 0.2.0 (Integração com IA implementada!)
 
-⚠️ **Importante**: A versão atual implementa apenas a interface e simula a análise com dados mockados. A integração real com IA para leitura e comparação de documentos será implementada nas próximas fases.
+✅ **Funcional**: O sistema agora usa GPT-3.5 para análise real de documentos!
+
+### O que funciona:
+- ✅ Análise real com OpenAI GPT-3.5
+- ✅ Extração de texto de arquivos TXT
+- ✅ Comparação inteligente de campos
+- ✅ Classificação automática de severidade
+
+### Limitações atuais:
+- ⚠️ Extração de PDFs e DOCs usa dados simulados (para testar, use arquivos .txt)
+- ⚠️ API key no frontend (apenas para desenvolvimento)
+- ⚠️ Para produção, necessário backend
 
 ## 🛠️ Tecnologias
 
@@ -49,6 +63,7 @@ O CalixFlow é uma plataforma de gestão de agências que inclui um módulo espe
 - **UI Components**: Radix UI (shadcn/ui)
 - **Estilo**: Tailwind CSS
 - **Ícones**: Lucide React
+- **IA**: OpenAI GPT-3.5-turbo
 
 ## 📦 Instalação
 
@@ -64,6 +79,10 @@ pnpm install
 # ou
 npm install
 
+# Configure a API key da OpenAI
+cp .env.example .env
+# Edite .env e adicione sua chave: VITE_OPENAI_API_KEY=sk-...
+
 # Execute em modo desenvolvimento
 pnpm dev
 # ou
@@ -75,13 +94,43 @@ pnpm build
 npm run build
 ```
 
+## 🔑 Configuração da API OpenAI
+
+1. Obtenha uma API key em: https://platform.openai.com/api-keys
+2. Copie o arquivo `.env.example` para `.env`
+3. Adicione sua chave no arquivo `.env`:
+   ```
+   VITE_OPENAI_API_KEY=sk-proj-sua-chave-aqui
+   ```
+
+⚠️ **Importante**: Nunca commite o arquivo `.env` com sua chave real!
+
 ## 🚀 Uso
 
 1. Acesse a aplicação em `http://localhost:3000`
 2. Faça upload do documento PI (Pedido de Inserção)
 3. Adicione os documentos que deseja validar
 4. Clique em "Iniciar Checagem"
-5. Aguarde a análise e visualize os resultados
+5. Aguarde a análise com IA (pode levar alguns segundos)
+6. Visualize os resultados detalhados
+
+### 🧪 Testando com Documentos de Exemplo
+
+Use os arquivos em `test-docs/` para testar:
+- `PI-teste.txt` - Documento base
+- `NotaFiscal-teste.txt` - Nota com divergência intencional no valor
+
+## 💰 Custos de Operação
+
+### GPT-3.5-turbo
+- **Input**: $0.0005 / 1K tokens
+- **Output**: $0.0015 / 1K tokens
+- **Custo por análise**: ~$0.01 - $0.02
+- **90% mais barato** que GPT-4!
+
+### Estimativa Mensal
+- 100 análises/dia = $1-2/dia
+- 2000 análises/mês = $20-40/mês
 
 ## 📁 Estrutura do Projeto
 
@@ -90,51 +139,48 @@ CalixFlow-checagem/
 ├── src/
 │   ├── components/
 │   │   ├── DocumentCheckView.tsx    # Componente principal de checagem
-│   │   ├── ui/                      # Componentes shadcn/ui
-│   │   └── ...                      # Outros componentes do sistema
+│   │   └── ui/                      # Componentes shadcn/ui
+│   ├── services/                    # ✨ NOVO!
+│   │   ├── documentExtractor.ts     # Extração de texto
+│   │   └── openaiAnalyzer.ts        # Análise com IA
 │   ├── assets/                      # Imagens e recursos
-│   ├── styles/                      # Estilos globais
 │   └── main.tsx                     # Entry point
-├── index.html
+├── test-docs/                       # Documentos de teste
+├── .env.example                     # Template de configuração
 ├── package.json
 ├── vite.config.ts
-├── ANALISE_BUGS.md                  # Análise detalhada de bugs
 └── README.md
 ```
 
-## 🔄 Próximas Implementações
+## 🔄 Próximas Melhorias
 
-### Fase 1: Integração com OpenAI ⏳
-- [ ] Extração de texto de PDFs usando `pdf-parse` ou `pdf.js`
-- [ ] Extração de texto de DOC/DOCX usando `mammoth`
-- [ ] Integração com OpenAI GPT-4 Vision para análise de documentos
-- [ ] Prompts estruturados para comparação de campos específicos
-- [ ] Parsing inteligente das respostas da IA
+### Curto Prazo
+- [ ] Extração real de PDFs (pdf-parse)
+- [ ] Extração real de DOCs (mammoth)
+- [ ] Validação de tamanho e tipo de arquivo
+- [ ] Tratamento de erros mais robusto
+- [ ] Loading states mais detalhados
 
-### Fase 2: Backend e Processamento
-- [ ] API REST para upload e processamento
-- [ ] Armazenamento seguro de documentos (S3 ou similar)
-- [ ] Fila de processamento para análises longas
-- [ ] Autenticação e autorização de usuários
+### Médio Prazo
+- [ ] Backend para processamento seguro
+- [ ] Autenticação de usuários
 - [ ] Histórico de análises
-
-### Fase 3: Melhorias e Otimizações
-- [ ] OCR para documentos escaneados
-- [ ] Suporte a mais formatos de arquivo
 - [ ] Exportação de relatórios em PDF
-- [ ] Configuração de regras de validação personalizadas
-- [ ] Dashboard com métricas de conformidade
+- [ ] Cache de análises repetidas
 
-## 🐛 Bugs Conhecidos
+### Longo Prazo
+- [ ] OCR para documentos escaneados
+- [ ] Suporte a mais formatos
+- [ ] Dashboard com métricas
+- [ ] Regras de validação personalizáveis
+- [ ] API REST para integração
 
-Veja o arquivo [ANALISE_BUGS.md](./ANALISE_BUGS.md) para lista completa de bugs e problemas identificados.
+## 🐛 Problemas Conhecidos
 
-### Principais Limitações Atuais:
-- ❌ Análise apenas simulada (não processa arquivos reais)
-- ❌ Sem integração com IA
-- ❌ Sem extração de texto de documentos
-- ❌ Sem validação de tipo/tamanho de arquivo
-- ❌ Sem tratamento de erros
+- ⚠️ Extração de PDFs e DOCs ainda usa dados simulados
+- ⚠️ API key exposta no frontend (apenas para desenvolvimento)
+- ⚠️ Sem tratamento de timeout para análises longas
+- ⚠️ Sem retry automático em caso de falha da API
 
 ## 🤝 Contribuindo
 
@@ -154,4 +200,5 @@ Para dúvidas ou sugestões sobre o projeto, entre em contato através do GitHub
 
 ---
 
-**Nota**: Este README será atualizado conforme o projeto evolui e novas funcionalidades são implementadas.
+**Última atualização**: 11/11/2025  
+**Versão**: 0.2.0 - Integração com GPT-3.5 implementada ✨
