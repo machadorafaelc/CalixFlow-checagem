@@ -2,9 +2,11 @@
  * Serviço de Análise de Documentos com OpenAI
  * 
  * Usa GPT-3.5-turbo para comparar documentos e identificar divergências
+ * Versão 2.0: Com prompts especializados e suporte a imagens
  */
 
 import OpenAI from 'openai';
+import { DOCUMENT_DEFINITIONS, VALIDATION_RULES, SEVERITY_LEVELS } from './documentDefinitions';
 
 export interface DocumentComparison {
   field: string;
@@ -50,11 +52,11 @@ export class OpenAIAnalyzer {
       const prompt = this.buildComparisonPrompt(piText, documentText, documentType);
       
       const response = await this.openai.chat.completions.create({
-        model: 'gpt-3.5-turbo', // Usando GPT-3.5 para economia
+        model: 'gpt-3.5-turbo',
         messages: [
           {
             role: 'system',
-            content: 'Você é um especialista em análise de documentos fiscais e comerciais brasileiros. Sua função é comparar documentos e identificar divergências com precisão.'
+            content: this.getSystemPrompt()
           },
           {
             role: 'user',
@@ -77,7 +79,93 @@ export class OpenAIAnalyzer {
   }
   
   /**
-   * Constrói o prompt para comparação de documentos
+   * Analisa documento a partir de imagem usando GPT-4 Vision
+   */
+  async analyzeDocumentImage(
+    piText: string,
+    imageBase64: string,
+    documentType: string
+  ): Promise<AnalysisResult> {
+    try {
+      const prompt = this.buildImageAnalysisPrompt(piText, documentType);
+      
+      const response = await this.openai.chat.completions.create({
+        model: 'gpt-4-vision-preview',
+        messages: [
+          {
+            role: 'system',
+            content: this.getSystemPrompt()
+          },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: prompt
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:image/jpeg;base64,${imageBase64}`
+                }
+              }
+            ]
+          }
+        ],
+        temperature: 0.1,
+        max_tokens: 2000,
+      });
+      
+      const content = response.choices[0].message.content || '{}';
+      const result = this.parseAIResponse(content);
+      
+      return result;
+      
+    } catch (error) {
+      console.error('Erro ao analisar imagem com OpenAI:', error);
+      throw new Error(`Falha na análise de imagem: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+    }
+  }
+  
+  /**
+   * Retorna o prompt de sistema especializado
+   */
+  private getSystemPrompt(): string {
+    return `Você é um especialista em análise de documentos fiscais e comerciais brasileiros, 
+com foco em documentos de mídia e publicidade.
+
+CONHECIMENTO ESPECIALIZADO:
+
+${DOCUMENT_DEFINITIONS.PI.name}:
+${DOCUMENT_DEFINITIONS.PI.description}
+
+${DOCUMENT_DEFINITIONS.NOTA_FISCAL.name}:
+${DOCUMENT_DEFINITIONS.NOTA_FISCAL.description}
+
+${DOCUMENT_DEFINITIONS.COMPROVANTE_VEICULACAO.name}:
+${DOCUMENT_DEFINITIONS.COMPROVANTE_VEICULACAO.description}
+
+${DOCUMENT_DEFINITIONS.MAPA_MIDIA.name}:
+${DOCUMENT_DEFINITIONS.MAPA_MIDIA.description}
+
+REGRAS DE VALIDAÇÃO:
+- Valor: ${VALIDATION_RULES.VALOR.description}
+- Período: ${VALIDATION_RULES.PERIODO.description}
+- Veículo: ${VALIDATION_RULES.VEICULO.description}
+- Cliente: ${VALIDATION_RULES.CLIENTE.description}
+- Formato: ${VALIDATION_RULES.FORMATO.description}
+
+NÍVEIS DE SEVERIDADE:
+- Crítico: ${SEVERITY_LEVELS.CRITICO.description}
+- Atenção: ${SEVERITY_LEVELS.ATENCAO.description}
+- Info: ${SEVERITY_LEVELS.INFO.description}
+- OK: ${SEVERITY_LEVELS.OK.description}
+
+Sua função é comparar documentos com precisão, identificar divergências e classificá-las corretamente.`;
+  }
+  
+  /**
+   * Constrói o prompt para comparação de documentos de texto
    */
   private buildComparisonPrompt(
     piText: string,
@@ -85,47 +173,130 @@ export class OpenAIAnalyzer {
     documentType: string
   ): string {
     const fieldsToCompare = this.getFieldsForDocumentType(documentType);
+    const docTypeName = this.getDocumentTypeName(documentType);
     
     return `
-Analise e compare os seguintes documentos brasileiros:
+Analise e compare os seguintes documentos:
 
-**DOCUMENTO BASE (PI - Pedido de Inserção):**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📄 DOCUMENTO BASE (PI - Pedido de Inserção)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ${piText}
 
-**DOCUMENTO PARA VALIDAÇÃO (${this.getDocumentTypeName(documentType)}):**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 DOCUMENTO PARA VALIDAÇÃO (${docTypeName})
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ${documentText}
 
-**CAMPOS IMPORTANTES A COMPARAR:**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔍 CAMPOS A COMPARAR
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ${fieldsToCompare.join('\n')}
 
-**INSTRUÇÕES:**
-1. Extraia os valores dos campos especificados de ambos os documentos
-2. Compare cada campo e identifique se há divergências
-3. Para cada campo, classifique a severidade:
-   - "critical": Valores completamente diferentes que impedem aprovação (ex: CNPJ diferente, valor muito discrepante)
-   - "warning": Pequenas diferenças que precisam revisão (ex: formatação diferente, valor com pequena diferença)
-   - "info": Informações complementares ou campos que não constam em um dos documentos
-4. Atribua um nível de confiança (0 a 1) para cada comparação
-5. Se um campo não existir em um dos documentos, indique como "info"
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 INSTRUÇÕES DE ANÁLISE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-**RESPONDA APENAS COM UM JSON NO SEGUINTE FORMATO:**
+1. EXTRAÇÃO:
+   - Extraia os valores dos campos especificados de AMBOS os documentos
+   - Se um campo não existir, indique como "Não informado"
+   - Normalize valores (ex: R$ 1.500,00 = 1500.00)
+
+2. COMPARAÇÃO:
+   - Compare cada campo extraído
+   - Para VALORES monetários: aceite diferença de até 1% (arredondamento)
+   - Para DATAS: verifique se está dentro do período aprovado
+   - Para TEXTOS: aceite variações de formatação, mas conteúdo deve ser igual
+
+3. CLASSIFICAÇÃO DE SEVERIDADE:
+   
+   ⛔ CRITICAL (Crítico):
+   - Valor divergente acima de 1%
+   - Período completamente fora do aprovado
+   - Veículo diferente do especificado
+   - Cliente/CNPJ incorreto
+   - Dados fiscais divergentes
+   
+   ⚠️ WARNING (Atenção):
+   - Valor com diferença menor que 1%
+   - Descrição incompleta mas correta
+   - Formato similar mas não idêntico
+   - Data de emissão próxima mas não exata
+   - Campos opcionais faltando
+   
+   ℹ️ INFO (Informativo):
+   - Informações adicionais presentes
+   - Formatação diferente mas conteúdo igual
+   - Campos complementares
+   - Observações gerais
+
+4. CONFIANÇA:
+   - 0.9-1.0: Valores claros e inequívocos
+   - 0.7-0.9: Valores identificáveis com pequena ambiguidade
+   - 0.5-0.7: Valores inferidos ou parcialmente legíveis
+   - 0.0-0.5: Valores muito ambíguos ou ilegíveis
+
+5. STATUS GERAL:
+   - "approved": Todos os campos críticos batem, divergências apenas info/warning
+   - "warning": Há divergências de atenção que precisam revisão
+   - "rejected": Há divergências críticas que impedem aprovação
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📤 FORMATO DE RESPOSTA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Responda APENAS com JSON no formato abaixo (sem texto adicional):
+
 {
   "comparisons": [
     {
       "field": "Nome do Campo",
-      "piValue": "Valor no PI",
-      "documentValue": "Valor no Documento",
+      "piValue": "Valor extraído do PI",
+      "documentValue": "Valor extraído do documento",
       "match": true ou false,
       "confidence": 0.95,
       "severity": "critical" ou "warning" ou "info",
-      "explanation": "Breve explicação da divergência (se houver)"
+      "explanation": "Explicação clara da divergência (se houver)"
     }
   ],
   "overallStatus": "approved" ou "rejected" ou "warning",
-  "summary": "Resumo geral da análise"
+  "summary": "Resumo executivo da análise em 1-2 frases"
 }
 
-**IMPORTANTE:** Responda APENAS com o JSON, sem texto adicional antes ou depois.
+IMPORTANTE: Responda APENAS com o JSON, sem markdown, sem texto antes ou depois.
+`;
+  }
+  
+  /**
+   * Constrói o prompt para análise de imagens
+   */
+  private buildImageAnalysisPrompt(piText: string, documentType: string): string {
+    const fieldsToCompare = this.getFieldsForDocumentType(documentType);
+    const docTypeName = this.getDocumentTypeName(documentType);
+    
+    return `
+Analise a IMAGEM do documento anexada e compare com o PI abaixo:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📄 DOCUMENTO BASE (PI - Pedido de Inserção)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${piText}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔍 CAMPOS A EXTRAIR DA IMAGEM E COMPARAR
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${fieldsToCompare.join('\n')}
+
+O documento na imagem é do tipo: ${docTypeName}
+
+INSTRUÇÕES:
+1. Leia cuidadosamente TODOS os textos visíveis na imagem
+2. Extraia os valores dos campos especificados
+3. Compare com os valores do PI
+4. Classifique divergências conforme as regras de severidade
+5. Se algum texto estiver ilegível, indique confidence baixo
+
+Responda APENAS com JSON no formato especificado anteriormente.
 `;
   }
   
@@ -135,40 +306,54 @@ ${fieldsToCompare.join('\n')}
   private getFieldsForDocumentType(documentType: string): string[] {
     const fieldsMap: Record<string, string[]> = {
       'notaFiscal': [
-        '- CNPJ do Fornecedor/Prestador',
-        '- Razão Social',
-        '- Valor Total da Nota',
-        '- Número da Nota Fiscal',
-        '- Data de Emissão',
-        '- Descrição dos Serviços'
+        '✓ Número da Nota Fiscal',
+        '✓ CNPJ do Emitente (Veículo)',
+        '✓ Razão Social do Emitente',
+        '✓ CNPJ do Tomador (Cliente)',
+        '✓ Razão Social do Tomador',
+        '✓ Valor Total da NF (com impostos)',
+        '✓ Valor Líquido (sem impostos)',
+        '✓ Data de Emissão',
+        '✓ Descrição do Serviço/Produto',
+        '✓ Período de Veiculação (se aplicável)',
+        '✓ ISS, PIS, COFINS (impostos)',
+      ],
+      'comprovante': [
+        '✓ Data/Hora da Veiculação',
+        '✓ Veículo de Comunicação',
+        '✓ Formato do Anúncio',
+        '✓ Programa/Seção',
+        '✓ Cliente/Marca',
+      ],
+      'mapa': [
+        '✓ Cliente/Marca',
+        '✓ Período da Campanha',
+        '✓ Lista de Veículos',
+        '✓ Valor Total Investido',
+        '✓ Distribuição por Veículo',
+        '✓ Formatos Contratados',
       ],
       'artigo299': [
-        '- CNPJ da Empresa',
-        '- Razão Social',
-        '- Período de Vigência',
-        '- Data de Emissão',
-        '- Regime de Tributação (Simples Nacional)'
-      ],
-      'relatorios': [
-        '- Período de Veiculação',
-        '- Nome do Cliente',
-        '- Nome da Campanha',
-        '- Valor Investido',
-        '- Métricas de Performance'
+        '✓ CNPJ da Empresa',
+        '✓ Razão Social',
+        '✓ Período de Vigência',
+        '✓ Data de Emissão',
+        '✓ Regime de Tributação',
       ],
       'simplesNacional': [
-        '- CNPJ',
-        '- Razão Social',
-        '- Período de Validade',
-        '- Situação no Simples Nacional (Ativa/Inativa)'
+        '✓ CNPJ',
+        '✓ Razão Social',
+        '✓ Período de Validade',
+        '✓ Situação (Ativa/Inativa)',
       ]
     };
     
     return fieldsMap[documentType] || [
-      '- CNPJ',
-      '- Razão Social',
-      '- Valores',
-      '- Datas'
+      '✓ CNPJ',
+      '✓ Razão Social',
+      '✓ Valores',
+      '✓ Datas',
+      '✓ Descrição',
     ];
   }
   
@@ -178,8 +363,9 @@ ${fieldsToCompare.join('\n')}
   private getDocumentTypeName(documentType: string): string {
     const names: Record<string, string> = {
       'notaFiscal': 'Nota Fiscal',
+      'comprovante': 'Comprovante de Veiculação',
+      'mapa': 'Mapa de Mídia',
       'artigo299': 'Artigo 299',
-      'relatorios': 'Relatório de Veiculação',
       'simplesNacional': 'Comprovante Simples Nacional'
     };
     

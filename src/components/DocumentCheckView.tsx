@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { DocumentExtractor } from '../services/documentExtractor';
 import { OpenAIAnalyzer } from '../services/openaiAnalyzer';
+import { ImageProcessor } from '../services/imageProcessor';
 import { Upload, FileCheck, AlertCircle, CheckCircle, XCircle, FileText, Loader2, Trash2 } from 'lucide-react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -160,15 +161,28 @@ export function DocumentCheckView() {
       for (const { key, doc } of docsToAnalyze) {
         if (!doc.file) continue;
 
-        // Extrai texto do documento
-        const docText = await documentExtractor.extractText(doc.file);
-
-        // Analisa com OpenAI
-        const analysisResult = await openaiAnalyzer.compareDocuments(
-          piText,
-          docText,
-          key
-        );
+        // Verifica se é imagem
+        const isImage = documentExtractor.isImage(doc.file);
+        
+        let analysisResult;
+        
+        if (isImage) {
+          // Processa imagem e analisa com GPT-4 Vision
+          const imageBase64 = await ImageProcessor.processImage(doc.file);
+          analysisResult = await openaiAnalyzer.analyzeDocumentImage(
+            piText,
+            imageBase64,
+            key
+          );
+        } else {
+          // Extrai texto e analisa normalmente
+          const docText = await documentExtractor.extractText(doc.file);
+          analysisResult = await openaiAnalyzer.compareDocuments(
+            piText,
+            docText,
+            key
+          );
+        }
 
         // Converte para formato de resultado
         const issues = analysisResult.comparisons
@@ -271,12 +285,12 @@ export function DocumentCheckView() {
                 <div className="border-2 border-dashed border-purple-300 rounded-xl p-12 text-center cursor-pointer hover:border-purple-400 hover:bg-purple-50/50 transition-all">
                   <Upload className="size-12 text-purple-400 mx-auto mb-4" />
                   <p className="text-purple-900 mb-2">Clique para fazer upload do PI</p>
-                  <p className="text-stone-500 text-sm">PDF, DOC, DOCX até 10MB</p>
+                  <p className="text-stone-500 text-sm">PDF, DOC, DOCX, TXT, JPG, PNG até 10MB</p>
                 </div>
                 <input
                   type="file"
                   className="hidden"
-                  accept=".pdf,.doc,.docx"
+                  accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.webp,.gif"
                   onChange={handlePIUpload}
                 />
               </label>
@@ -382,7 +396,7 @@ export function DocumentCheckView() {
                   <input
                     type="file"
                     className="hidden"
-                    accept=".pdf,.doc,.docx"
+                    accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.webp,.gif"
                     onChange={(e) => handleDocumentUpload('outros', e)}
                   />
                 </label>
@@ -581,7 +595,7 @@ function DocumentUploadCard({ title, document, onUpload, onRemove }: DocumentUpl
           <input
             type="file"
             className="hidden"
-            accept=".pdf,.doc,.docx"
+            accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.webp,.gif"
             onChange={onUpload}
           />
         </label>
